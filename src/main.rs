@@ -62,5 +62,47 @@ fn main() {
                 println!("Received message: {}", decrypted);
             }
         }
+    } else if mode == "middle" {
+        // ask for the port
+        println!("Please enter the port number you would like to listen on:");
+        let mut port = String::new();
+        std::io::stdin().read_line(&mut port).unwrap();
+        let port: u16 = port.trim().parse().unwrap();
+        
+        // man-in-the-middle: receive the message and forward it
+        // don't decipher it, and don't impact the time it takes to send the message
+        let mut messages: Vec<Vec<u64>> = Vec::new();
+        
+        loop {
+            let listener = std::net::TcpListener::bind(format!("localhost:{}", port)).unwrap();
+            let mut message = Vec::new();
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let mut buffer = [0; 8];
+                message.clear();
+                while let Ok(n) = stream.read(&mut buffer) {
+                    if n == 0 {
+                        break;
+                    }
+                    message.push(u64::from_be_bytes(buffer));
+                }
+                // forward the message
+                let mut stream = TcpStream::connect("localhost:8080").unwrap();
+                for c in &message {
+                    stream.write(&c.to_be_bytes()).unwrap();
+                }
+                messages.push(message.clone());
+            }
+        }
     }
+}
+
+fn write_to_file(message: String) {
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open("messages.txt")
+        .unwrap();
+    file.write_all(message.as_bytes()).unwrap();
 }
