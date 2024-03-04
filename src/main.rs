@@ -5,6 +5,9 @@ mod vigenere;
 mod caesar;
 mod rsa;
 
+// global variable to store the messages
+static mut LASTMSG: Vec<Vec<u64>> = Vec::new();
+
 fn main() {
     // select "receive" or "send" mode, then open / receive a connection
     println!("Would you like to send or receive a message? (send/receive)");
@@ -71,7 +74,6 @@ fn main() {
         
         // man-in-the-middle: receive the message and forward it
         // don't decipher it, and don't impact the time it takes to send the message
-        let mut messages: Vec<Vec<u64>> = Vec::new();
         
         loop {
             let listener = std::net::TcpListener::bind(format!("localhost:{}", port)).unwrap();
@@ -91,8 +93,31 @@ fn main() {
                 for c in &message {
                     stream.write(&c.to_be_bytes()).unwrap();
                 }
-                messages.push(message.clone());
             }
+        }
+    } else if mode=="mid" {
+        loop {
+            listen_and_forward("localhost", 8080);
+        }
+    }
+}
+
+fn listen_and_forward(ip: &str, port: u16) -> (){
+    let listener = std::net::TcpListener::bind(format!("{}:{}", ip, port)).unwrap();
+    for stream in listener.incoming() {
+        let mut stream = stream.unwrap();
+        let mut buffer = [0; 8];
+        let mut message = Vec::new();
+        while let Ok(n) = stream.read(&mut buffer) {
+            if n == 0 {
+                break;
+            }
+            message.push(u64::from_be_bytes(buffer));
+        }
+        // forward the message
+        let mut stream = TcpStream::connect("localhost:8080").unwrap();
+        for c in &message {
+            stream.write(&c.to_be_bytes()).unwrap();
         }
     }
 }
