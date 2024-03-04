@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 
 mod vigenere;
 mod caesar;
@@ -96,38 +96,52 @@ fn main() {
             }
         }
     } else if mode=="mid" {
-        loop {
-            listen_and_forward("localhost", 8080);
-        }
+        // open connection to port 5050
+        std::thread::spawn(|| {
+            loop {
+                listen_and_forward("localhost", 8080);
+            }
+        }).join().unwrap();
     }
 }
 
 fn listen_and_forward(ip: &str, port: u16) -> (){
     let listener = std::net::TcpListener::bind(format!("{}:{}", ip, port)).unwrap();
+    let message = receive_message(listener);
+    println!("Received message: {}", message.iter().map(|c| *c as u8 as char).collect::<String>());
+    // forward the message
+    fwd_message(message, ip, 8080);
+    //display_on_thread(&message);
+}
+
+fn receive_message(listener: TcpListener) -> Vec<u64> {
+    let mut message = Vec::new();
     for stream in listener.incoming() {
         let mut stream = stream.unwrap();
         let mut buffer = [0; 8];
-        let mut message = Vec::new();
         while let Ok(n) = stream.read(&mut buffer) {
             if n == 0 {
                 break;
             }
             message.push(u64::from_be_bytes(buffer));
         }
-        // forward the message
-        let mut stream = TcpStream::connect("localhost:8080").unwrap();
-        for c in &message {
-            stream.write(&c.to_be_bytes()).unwrap();
-        }
+        break;
+    }
+    message
+}
+
+fn fwd_message(message: Vec<u64>, ip: &str, port: u16) -> (){
+    // forward the message
+    let mut stream = TcpStream::connect(format!("{}:{}", ip, port)).unwrap();
+    for c in &message {
+        stream.write(&c.to_be_bytes()).unwrap();
     }
 }
 
-fn write_to_file(message: String) {
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open("messages.txt")
-        .unwrap();
-    file.write_all(message.as_bytes()).unwrap();
+fn display_on_thread(message: &Vec<u64>) -> (){
+    // execute a println! on a separate thread
+    let message = message.clone();
+    std::thread::spawn(move || {
+        println!("Received message: {}", message.iter().map(|c| *c as u8 as char).collect::<String>());
+    });
 }
